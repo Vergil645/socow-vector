@@ -4,7 +4,7 @@
 
 #include "socow-vector.h"
 
-template struct socow_vector<int>;
+template struct socow_vector<int, 2>;
 
 template <typename T>
 T const& as_const(T& obj) {
@@ -165,14 +165,14 @@ TEST(correctness, push_back_from_self) {
 
 TEST(correctness, subscription) {
     size_t const N = 500;
-    socow_vector<size_t> a;
+    socow_vector<size_t, 2> a;
     for (size_t i = 0; i != N; ++i)
         a.push_back(2 * i + 1);
 
     for (size_t i = 0; i != N; ++i)
         EXPECT_EQ(2 * i + 1, a[i]);
 
-    socow_vector<size_t> const& ca = a;
+    socow_vector<size_t, 2> const& ca = a;
 
     for (size_t i = 0; i != N; ++i)
         EXPECT_EQ(2 * i + 1, ca[i]);
@@ -528,16 +528,16 @@ TEST(correctness, insert_end) {
 
 TEST(performance, insert) {
     const size_t N = 10000;
-    socow_vector<socow_vector<size_t>> a;
+    socow_vector<socow_vector<size_t, 2>, 2> a;
 
     for (size_t i = 0; i < N; ++i) {
-        a.push_back(socow_vector<size_t>());
+        a.push_back(socow_vector<size_t, 2>());
         for (size_t j = 0; j < N; ++j) {
             a.back().push_back(j);
         }
     }
 
-    socow_vector<size_t> temp;
+    socow_vector<size_t, 2> temp;
     for (size_t i = 0; i < N; ++i) {
         temp.push_back(i);
     }
@@ -759,7 +759,7 @@ TEST(correctness, copy_throw) {
 
 TEST(correctness, iter_types) {
     using el_t = element<size_t>;
-    using vec_t = socow_vector<el_t>;
+    using vec_t = socow_vector<el_t, 2>;
     bool test1 = std::is_same<el_t*, typename vec_t::iterator>::value;
     bool test2 =
         std::is_same<el_t const*, typename vec_t::const_iterator>::value;
