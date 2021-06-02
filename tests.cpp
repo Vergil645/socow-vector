@@ -304,13 +304,16 @@ TEST(correctness, reserve) {
 }
 
 TEST(correctness, reserve_2) {
-    socow_vector<element<size_t>, 3> a;
-    a.reserve(10);
-    for (size_t i = 0; i != 5; ++i)
-        a.push_back(i + 100);
+    {
+        socow_vector<element<size_t>, 3> a;
+        a.reserve(10);
+        for (size_t i = 0; i != 5; ++i)
+            a.push_back(i + 100);
 
-    socow_vector<element<size_t>, 3> b = a;
-    b.reserve(3);
+        socow_vector<element<size_t>, 3> b = a;
+        b.reserve(3);
+    }
+    element<size_t>::expect_no_instances();
 }
 
 TEST(correctness, superfluous_reserve) {
