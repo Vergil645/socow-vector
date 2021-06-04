@@ -165,19 +165,19 @@ struct socow_vector {
 
     void swap(socow_vector& other) {
         if (_is_small) {
-            if (other._is_small) {
-                std::array<std::aligned_storage_t<sizeof(T), alignof(T)>,
-                    SMALL_SIZE>
-                    tmp;
-                for (size_t i = 0; i != _size; i++) {
-                    try {
-                        new (&tmp[i]) T(*reinterpret_cast<T*>(&_stat_buffer[i]));
-                    } catch (...) {
-                        clear_prefix(tmp, i);
-                        throw;
-                    }
+            std::array<std::aligned_storage_t<sizeof(T), alignof(T)>,
+                       SMALL_SIZE>
+                tmp;
+            for (size_t i = 0; i != _size; i++) {
+                try {
+                    new (&tmp[i]) T(*reinterpret_cast<T*>(&_stat_buffer[i]));
+                } catch (...) {
+                    clear_prefix(tmp, i);
+                    throw;
                 }
-                clear_prefix(_stat_buffer, _size);
+            }
+            clear_prefix(_stat_buffer, _size);
+            if (other._is_small) {
                 for (size_t i = 0; i != other._size; i++) {
                     try {
                         new (&_stat_buffer[i])
@@ -200,15 +200,48 @@ struct socow_vector {
                 clear_prefix(tmp, _size);
                 std::swap(_size, other._size);
             } else {
-                change_capacity(other.capacity());
+                _dyn_buffer = other._dyn_buffer;
+                for (size_t i = 0; i != _size; i++) {
+                    try {
+                        new (&other._stat_buffer[i])
+                            T(*reinterpret_cast<T*>(&tmp[i]));
+                    } catch (...) {
+                        clear_prefix(tmp, _size);
+                        throw;
+                    }
+                }
+                clear_prefix(tmp, _size);
                 std::swap(_size, other._size);
-                std::swap(_dyn_buffer, other._dyn_buffer);
+                std::swap(_is_small, other._is_small);
             }
         } else {
             if (other._is_small) {
-                other.change_capacity(capacity());
+                std::array<std::aligned_storage_t<sizeof(T), alignof(T)>,
+                           SMALL_SIZE>
+                    tmp;
+                for (size_t i = 0; i != other._size; i++) {
+                    try {
+                        new (&tmp[i])
+                            T(*reinterpret_cast<T*>(&other._stat_buffer[i]));
+                    } catch (...) {
+                        clear_prefix(tmp, i);
+                        throw;
+                    }
+                }
+                clear_prefix(other._stat_buffer, other._size);
+                other._dyn_buffer = _dyn_buffer;
+                for (size_t i = 0; i != other._size; i++) {
+                    try {
+                        new (&_stat_buffer[i])
+                            T(*reinterpret_cast<T*>(&tmp[i]));
+                    } catch (...) {
+                        clear_prefix(tmp, other._size);
+                        throw;
+                    }
+                }
+                clear_prefix(tmp, other._size);
                 std::swap(_size, other._size);
-                std::swap(_dyn_buffer, other._dyn_buffer);
+                std::swap(_is_small, other._is_small);
             } else {
                 std::swap(_size, other._size);
                 std::swap(_dyn_buffer, other._dyn_buffer);
