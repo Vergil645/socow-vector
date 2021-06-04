@@ -1,12 +1,12 @@
 #pragma once
 #include <cstddef>
+#include <type_traits>
+#include <array>
 
 template <typename T, size_t SMALL_SIZE>
 struct socow_vector {
     using iterator = T*;
     using const_iterator = T const*;
-    using small_array =
-        std::array<std::aligned_storage_t<sizeof(T), alignof(T)>, SMALL_SIZE>;
 
     socow_vector() : stat_buf_() {}
 
@@ -221,7 +221,8 @@ private:
 
     struct static_storage {
         size_t size_{0};
-        small_array data_;
+        std::array<std::aligned_storage_t<sizeof(T), alignof(T)>, SMALL_SIZE>
+            data_;
 
         static_storage() = default;
 
