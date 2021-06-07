@@ -27,11 +27,9 @@ struct socow_vector {
 
     ~socow_vector() {
         if (is_static()) {
-            //destruct_stat_buffer(stat_buf_, size());
-            stat_buf_.clear(size());
+            destruct_stat_buffer(stat_buf_, size());
         } else {
-            //destruct_dyn_buffer(dyn_buf_, size());
-            clear_dyn_buffer(dyn_buf_, size());
+            destruct_dyn_buffer(dyn_buf_, size());
         }
     }
 
