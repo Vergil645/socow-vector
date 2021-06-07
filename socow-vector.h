@@ -16,8 +16,7 @@ struct socow_vector {
         if (other.is_static()) {
             new (&stat_buf_) static_storage(other.stat_buf_, other.size());
         } else {
-            dyn_buf_ = other.dyn_buf_;
-            ++dyn_buf_->copy_count_;
+            new (&dyn_buf_) dynamic_storage(other.dyn_buf_);
         }
     }
 
@@ -28,9 +27,11 @@ struct socow_vector {
 
     ~socow_vector() {
         if (is_static()) {
-            destruct_stat_buffer();
+            //destruct_stat_buffer(stat_buf_, size());
+            stat_buf_.clear(size());
         } else {
-            destruct_dyn_buffer();
+            //destruct_dyn_buffer(dyn_buf_, size());
+            clear_dyn_buffer(dyn_buf_, size());
         }
     }
 
@@ -39,12 +40,12 @@ struct socow_vector {
             return *stat_buf_.get_ptr(i);
         } else {
             copy_dyn_buffer();
-            return dyn_buf_->data_[i];
+            return dyn_buf_.data_[i];
         }
     }
 
     T const& operator[](size_t i) const {
-        return is_static() ? *stat_buf_.get_ptr(i) : dyn_buf_->data_[i];
+        return is_static() ? *stat_buf_.get_ptr(i) : dyn_buf_.data_[i];
     }
 
     T* data() {
@@ -52,12 +53,12 @@ struct socow_vector {
             return stat_buf_.get_ptr(0);
         } else {
             copy_dyn_buffer();
-            return dyn_buf_->data_;
+            return dyn_buf_.data_;
         }
     }
 
     T const* data() const {
-        return is_static() ? stat_buf_.get_ptr(0) : dyn_buf_->data_;
+        return is_static() ? stat_buf_.get_ptr(0) : dyn_buf_.data_;
     }
 
     size_t size() const {
@@ -91,8 +92,8 @@ struct socow_vector {
             new (&stat_buf_.data_[size()]) T(value);
         } else {
             copy_dyn_buffer();
-            new (dyn_buf_->data_ + size())
-                T(val_pos < size() ? dyn_buf_->data_[val_pos] : value);
+            new (dyn_buf_.data_ + size())
+                T(val_pos < size() ? dyn_buf_.data_[val_pos] : value);
         }
         size_ += 2;
     }
@@ -102,7 +103,7 @@ struct socow_vector {
             stat_buf_.get_ptr(size() - 1)->~T();
         } else {
             copy_dyn_buffer();
-            dyn_buf_->data_[size() - 1].~T();
+            dyn_buf_.data_[size() - 1].~T();
         }
         size_ -= 2;
     }
@@ -112,7 +113,7 @@ struct socow_vector {
     }
 
     size_t capacity() const {
-        return is_static() ? SMALL_SIZE : dyn_buf_->capacity_;
+        return is_static() ? SMALL_SIZE : dyn_buf_.capacity_;
     }
 
     void reserve(size_t new_cap) {
@@ -134,7 +135,7 @@ struct socow_vector {
             stat_buf_.clear(size());
         } else {
             copy_dyn_buffer();
-            dyn_buf_->clear(size());
+            dyn_buf_.clear(size());
         }
         size_ = size_ % 2;
     }
@@ -142,9 +143,9 @@ struct socow_vector {
     void swap(socow_vector& other) {
         if (is_static() && other.is_static()) {
             static_storage tmp(stat_buf_, size());
-            destruct_stat_buffer();
+            destruct_stat_buffer(stat_buf_, size());
             new (&stat_buf_) static_storage(other.stat_buf_, other.size());
-            other.destruct_stat_buffer();
+            destruct_stat_buffer(other.stat_buf_, other.size());
             new (&other.stat_buf_) static_storage(tmp, size());
             tmp.clear(size());
         } else if (is_static() && !other.is_static()) {
@@ -152,7 +153,7 @@ struct socow_vector {
         } else if (other.is_static()) {
             swap_stat_dyn(other, *this);
         } else {
-            std::swap(dyn_buf_, other.dyn_buf_);
+            dyn_buf_.swap(other.dyn_buf_);
         }
         std::swap(size_, other.size_);
     }
@@ -162,7 +163,7 @@ struct socow_vector {
             return stat_buf_.get_ptr(0);
         } else {
             copy_dyn_buffer();
-            return dyn_buf_->data_;
+            return dyn_buf_.data_;
         }
     }
 
@@ -171,7 +172,7 @@ struct socow_vector {
     }
 
     const_iterator begin() const {
-        return is_static() ? stat_buf_.get_ptr(0) : dyn_buf_->data_;
+        return is_static() ? stat_buf_.get_ptr(0) : dyn_buf_.data_;
     }
 
     const_iterator end() const {
@@ -187,7 +188,7 @@ struct socow_vector {
             }
         } else {
             for (size_t i = size() - 1; i != pos_index; i--) {
-                std::swap(dyn_buf_->data_[i - 1], dyn_buf_->data_[i]);
+                std::swap(dyn_buf_.data_[i - 1], dyn_buf_.data_[i]);
             }
         }
         return get_begin() + pos_index;
@@ -210,7 +211,7 @@ struct socow_vector {
             } else {
                 copy_dyn_buffer();
                 for (size_t i = first_index; i != size() - cnt; i++) {
-                    std::swap(dyn_buf_->data_[i], dyn_buf_->data_[i + cnt]);
+                    std::swap(dyn_buf_.data_[i], dyn_buf_.data_[i + cnt]);
                 }
             }
             for (size_t i = 0; i != cnt; i++) {
@@ -259,17 +260,27 @@ private:
 
     struct dynamic_storage {
         size_t capacity_{0};
-        size_t copy_count_{1};
+        size_t* copy_count_;
         T* data_{nullptr};
 
-        dynamic_storage() = default;
+        dynamic_storage() : copy_count_(new size_t(1)) {}
 
         explicit dynamic_storage(size_t cap)
-            : capacity_(cap),
+            : capacity_(cap), copy_count_(new size_t(1)),
               data_(static_cast<T*>(operator new(capacity_ * sizeof(T)))) {}
 
-        ~dynamic_storage() {
-            operator delete(data_);
+        dynamic_storage(dynamic_storage const& other)
+            : capacity_(other.capacity_), copy_count_(other.copy_count_),
+              data_(other.data_) {
+            ++(*copy_count_);
+        }
+
+        ~dynamic_storage() = default;
+
+        void swap(dynamic_storage& other) {
+            std::swap(capacity_, other.capacity_);
+            std::swap(copy_count_, other.copy_count_);
+            std::swap(data_, other.data_);
         }
 
         void clear(size_t cnt) {
@@ -281,7 +292,7 @@ private:
 
     union {
         static_storage stat_buf_;
-        dynamic_storage* dyn_buf_;
+        dynamic_storage dyn_buf_;
     };
 
     bool is_static() {
@@ -292,32 +303,38 @@ private:
         return size_ % 2 != 0;
     }
 
-    void destruct_stat_buffer() {
-        stat_buf_.clear(size());
-        stat_buf_.~static_storage();
-    }
-
-    void destruct_dyn_buffer() {
-        if (dyn_buf_->copy_count_ == 1) {
-            dyn_buf_->clear(size());
-            delete dyn_buf_;
+    static void clear_dyn_buffer(dynamic_storage& buf, size_t buf_size) {
+        if (*buf.copy_count_ == 1) {
+            delete buf.copy_count_;
+            buf.clear(buf_size);
+            operator delete(buf.data_);
         } else {
-            --dyn_buf_->copy_count_;
+            --(*buf.copy_count_);
         }
     }
 
+    static void destruct_stat_buffer(static_storage& buf, size_t buf_size) {
+        buf.clear(buf_size);
+        buf.~static_storage();
+    }
+
+    static void destruct_dyn_buffer(dynamic_storage& buf, size_t buf_size) {
+        clear_dyn_buffer(buf, buf_size);
+        buf.~dynamic_storage();
+    }
+
     void copy_dyn_buffer() {
-        if (dyn_buf_->copy_count_ != 1) {
+        if (*dyn_buf_.copy_count_ != 1) {
             rebuild_storage(capacity());
         }
     }
 
     T& get_elem(size_t i) {
-        return is_static() ? *stat_buf_.get_ptr(i) : dyn_buf_->data_[i];
+        return is_static() ? *stat_buf_.get_ptr(i) : dyn_buf_.data_[i];
     }
 
     iterator get_begin() {
-        return is_static() ? stat_buf_.get_ptr(0) : dyn_buf_->data_;
+        return is_static() ? stat_buf_.get_ptr(0) : dyn_buf_.data_;
     }
 
     iterator get_end() {
@@ -326,8 +343,9 @@ private:
 
     static void swap_stat_dyn(socow_vector& stat, socow_vector& dyn) {
         static_storage tmp(stat.stat_buf_, stat.size());
-        stat.destruct_stat_buffer();
-        stat.dyn_buf_ = dyn.dyn_buf_;
+        destruct_stat_buffer(stat.stat_buf_, stat.size());
+        new (&stat.dyn_buf_) dynamic_storage(dyn.dyn_buf_);
+        destruct_dyn_buffer(dyn.dyn_buf_, dyn.size());
         new (&dyn.stat_buf_) static_storage(tmp, stat.size());
         tmp.clear(stat.size());
     }
@@ -337,35 +355,34 @@ private:
             static_storage new_stat_buffer;
             for (size_t i = 0; i != size(); i++) {
                 try {
-                    new (&new_stat_buffer.data_[i]) T(dyn_buf_->data_[i]);
+                    new (&new_stat_buffer.data_[i]) T(dyn_buf_.data_[i]);
                 } catch (...) {
                     new_stat_buffer.clear(i);
                     throw;
                 }
             }
-            destruct_dyn_buffer();
+            destruct_dyn_buffer(dyn_buf_, size());
             new (&stat_buf_) static_storage(new_stat_buffer, size());
             ++size_;
             new_stat_buffer.clear(size());
         } else if (new_cap > SMALL_SIZE) {
-            auto* new_dyn_buffer = new dynamic_storage(new_cap);
+            dynamic_storage new_dyn_buffer(new_cap);
             for (size_t i = 0; i != size(); i++) {
                 try {
-                    new (new_dyn_buffer->data_ + i) T(get_elem(i));
+                    new (new_dyn_buffer.data_ + i) T(get_elem(i));
                 } catch (...) {
-                    new_dyn_buffer->clear(i);
-                    delete new_dyn_buffer;
+                    clear_dyn_buffer(new_dyn_buffer, i);
                     throw;
                 }
             }
             if (is_static()) {
-                destruct_stat_buffer();
-                dyn_buf_ = new_dyn_buffer;
+                destruct_stat_buffer(stat_buf_, size());
                 --size_;
             } else {
-                destruct_dyn_buffer();
-                dyn_buf_ = new_dyn_buffer;
+                destruct_dyn_buffer(dyn_buf_, size());
             }
+            new (&dyn_buf_) dynamic_storage(new_dyn_buffer);
+            clear_dyn_buffer(new_dyn_buffer, size());
         }
     }
 };
