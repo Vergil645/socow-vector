@@ -274,7 +274,7 @@ private:
         ~dynamic_storage() = default;
 
         size_t& capacity() {
-            return *all_data_;
+            return all_data_[0];
         }
 
         size_t const& capacity() const {
