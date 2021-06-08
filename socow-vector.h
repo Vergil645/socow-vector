@@ -257,10 +257,10 @@ private:
     };
 
     struct dynamic_storage {
-        char* all_data_;
+        size_t* all_data_;
 
         explicit dynamic_storage(size_t cap)
-            : all_data_(static_cast<char*>(operator new(2 * sizeof(size_t) +
+            : all_data_(static_cast<size_t*>(operator new(2 * sizeof(size_t) +
                                                         cap * sizeof(T)))) {
             capacity() = cap;
             copy_count() = 1;
@@ -274,23 +274,23 @@ private:
         ~dynamic_storage() = default;
 
         size_t& capacity() {
-            return *reinterpret_cast<size_t*>(all_data_);
+            return *all_data_;
         }
 
         size_t const& capacity() const {
-            return *reinterpret_cast<size_t*>(all_data_);
+            return all_data_[0];
         }
 
         size_t& copy_count() {
-            return *reinterpret_cast<size_t*>(all_data_ + sizeof(size_t));
+            return all_data_[1];
         }
 
         T* data() {
-            return reinterpret_cast<T*>(all_data_ + 2 * sizeof(size_t));
+            return reinterpret_cast<T*>(all_data_ + 2);
         }
 
         T const* data() const {
-            return reinterpret_cast<T*>(all_data_ + 2 * sizeof(size_t));
+            return reinterpret_cast<T*>(all_data_ + 2);
         }
 
         void swap(dynamic_storage& other) {
