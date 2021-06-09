@@ -331,12 +331,12 @@ private:
             new (&dyn.stat_buf_) static_storage(stat.stat_buf_, stat.size());
         } catch (...) {
             new (&dyn.dyn_buf_) dynamic_storage(tmp);
-            destruct_dyn_buffer(tmp, dyn.size());
+            --dyn.dyn_buf_.all_data_->ref_count_;
             throw;
         }
         destruct_stat_buffer(stat.stat_buf_, stat.size());
         new (&stat.dyn_buf_) dynamic_storage(tmp);
-        destruct_dyn_buffer(tmp, dyn.size());
+        --stat.dyn_buf_.all_data_->ref_count_;
     }
 
     void rebuild_storage(size_t new_cap) {
